@@ -82,7 +82,9 @@ local dots = {}       -- button -> fontstring
 local function DotOf(button, hotKey)
     local dot = dots[button]
     if not dot then
-        dot = hotKey:GetParent():CreateFontString(nil, hotKey:GetDrawLayer())
+        local layer, sublevel = hotKey:GetDrawLayer()
+        dot = hotKey:GetParent():CreateFontString(nil, layer)
+        dot:SetDrawLayer(layer, sublevel)
         local fontObject = hotKey:GetFontObject()
         if fontObject then
             dot:SetFontObject(fontObject)
