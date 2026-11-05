@@ -1,0 +1,7 @@
+<Bindings>
+	<!-- Key Bindings > AddOns > Hide Keybinds. The game loads this file itself (it isn't in the TOC). runOnUp: the
+	     function hears the key going down and coming back up, so the keybinds show only while it's held. -->
+	<Binding name="HIDEKEYBINDS_PEEK" header="HIDEKEYBINDS" category="ADDONS" runOnUp="true">
+		HideKeybinds_Peek(keystate)
+	</Binding>
+</Bindings>

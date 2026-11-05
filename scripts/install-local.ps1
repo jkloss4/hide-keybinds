@@ -1,0 +1,34 @@
+<#
+.SYNOPSIS
+  Copies the addon folder from this repo into the WoW AddOns folder (for testing local changes).
+.PARAMETER Client
+  retail or forever: the client to install into, found by find-wow-addons.ps1. Defaults to retail.
+.PARAMETER AddOnsPath
+  An Interface\AddOns folder to install into instead.
+#>
+param(
+  [ValidateSet("retail", "forever")][string]$Client = "retail",
+  [string]$AddOnsPath
+)
+if (-not $AddOnsPath) { $AddOnsPath = & (Join-Path $PSScriptRoot "find-wow-addons.ps1") -Client $Client }
+$repo = Split-Path -Parent $PSScriptRoot
+foreach ($name in "HideKeybinds") {
+  # /MIR makes the installed folder an exact mirror (removes files deleted from the repo); only touches this folder.
+  robocopy (Join-Path $repo $name) (Join-Path $AddOnsPath $name) /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw "robocopy failed for $name (exit $LASTEXITCODE)" }
+  # Stamp the installed TOC with this build's version, as the release does: the latest tag, plus the commits since
+  # and the commit when there are unreleased changes (e.g. 1.8.4-2-gabc1234). The repo's TOC is left as it is.
+  $version = git -C $repo describe --tags --always 2>$null
+  if ($version) {
+    $version = $version -replace '^v', ''
+    foreach ($toc in Get-ChildItem (Join-Path $AddOnsPath $name) -Filter *.toc) {
+      $text = [IO.File]::ReadAllText($toc.FullName)
+      [IO.File]::WriteAllText($toc.FullName, ($text -replace '(?m)^## Version:[^\r\n]*', "## Version: $version"), (New-Object Text.UTF8Encoding $false))
+    }
+  }
+  Write-Host "installed $name"
+}
+Write-Host "Done. In game: /reload"
+
+# robocopy exit codes 1-7 mean success; don't leak them as the script's exit code
+exit 0
