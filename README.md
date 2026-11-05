@@ -12,6 +12,9 @@ Options > AddOns > Hide Keybinds (or `/hidekeybinds`):
 - **Hide Keybinds**: on or off for every bar at once (`/hidekeybinds on|off`).
 - **Hide the Range Dot**: buttons without a keybind show a small dot that turns red when your target is out of
   range. It stays visible unless you turn this on.
+- **Range Dot on Every Button**: buttons with a keybind have no dot (Blizzard turns the keybind red instead), so
+  while their keybind is hidden they get the dot too, with the same rules: shown when the action has a range, red
+  when the target is out of it. On by default.
 - **Show Keybinds While Held**: click, then press a key (Shift, Ctrl and Alt combinations and extra mouse buttons
   work). Escape cancels, right-click clears it. It's the same binding as Options > Keybindings > AddOns > Hide
   Keybinds.

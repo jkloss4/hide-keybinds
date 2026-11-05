@@ -7,6 +7,7 @@ local _, ns = ...
 local DEFAULTS = {
     enabled = true,
     hideRangeDot = false,
+    rangeDotOnBound = true,
     bars = {},
 }
 
@@ -71,18 +72,94 @@ local function IsRangeDot(hotKey)
     return text == nil or text == "" or text == RANGE_INDICATOR
 end
 
+-- A button with a keybind has no range dot: Blizzard turns the keybind text red instead. While that text is hidden,
+-- such a button gets a dot of its own, in the same place and with the same rules as Blizzard's (shown when the
+-- action checks range, red when out of range). Blizzard tells every button about range changes through
+-- ActionButton_UpdateRangeIndicator; the hook below keeps what it last said.
+local rangeState = {} -- button -> { checks, inRange }
+local dots = {}       -- button -> fontstring
+
+local function DotOf(button, hotKey)
+    local dot = dots[button]
+    if not dot then
+        dot = hotKey:GetParent():CreateFontString(nil, hotKey:GetDrawLayer())
+        local fontObject = hotKey:GetFontObject()
+        if fontObject then
+            dot:SetFontObject(fontObject)
+        else
+            dot:SetFont(hotKey:GetFont())
+        end
+        dot:SetAllPoints(hotKey)
+        dot:SetJustifyH(hotKey:GetJustifyH())
+        dot:SetJustifyV(hotKey:GetJustifyV())
+        dot:SetText(RANGE_INDICATOR)
+        dot:Hide()
+        dots[button] = dot
+    end
+    return dot
+end
+
+local function HasActionOn(button)
+    local action = button.action
+    return action == nil or HasAction(action)
+end
+
+local function UpdateButton(button, hideBar)
+    local hotKey = HotKeyOf(button)
+    local isDot = IsRangeDot(hotKey)
+    local hide = hideBar and (DB().hideRangeDot or not isDot)
+    hotKey:SetAlpha(hide and 0 or 1)
+
+    local state = rangeState[button]
+    local showDot = hide and not isDot and DB().rangeDotOnBound and not DB().hideRangeDot
+        and state and state.checks and hotKey:IsShown() and HasActionOn(button)
+    if showDot then
+        local dot = DotOf(button, hotKey)
+        dot:SetVertexColor(((state.inRange and ACTIONBAR_HOTKEY_FONT_COLOR) or RED_FONT_COLOR):GetRGB())
+        dot:Show()
+    elseif dots[button] then
+        dots[button]:Hide()
+    end
+end
+
+local function BarHides(bar)
+    return DB().enabled and BarHidden(bar.key) and not peeking
+end
+
 local function UpdateBar(bar)
-    local hideBar = DB().enabled and BarHidden(bar.key) and not peeking
+    local hideBar = BarHides(bar)
     for _, button in ipairs(Buttons(bar)) do
-        local hotKey = HotKeyOf(button)
-        local hide = hideBar and (DB().hideRangeDot or not IsRangeDot(hotKey))
-        hotKey:SetAlpha(hide and 0 or 1)
+        UpdateButton(button, hideBar)
     end
 end
 
 local function UpdateAll()
     if not DB() then return end
     for _, bar in ipairs(BARS) do UpdateBar(bar) end
+end
+
+-- Which of our bars a button is on (filled the first time a button reports range).
+local barOf = {}
+local function BarOf(button)
+    if barOf[button] == nil then
+        barOf[button] = false
+        for _, bar in ipairs(BARS) do
+            for _, b in ipairs(Buttons(bar)) do
+                if b == button then barOf[button] = bar end
+            end
+        end
+    end
+    return barOf[button]
+end
+
+if ActionButton_UpdateRangeIndicator then
+    hooksecurefunc("ActionButton_UpdateRangeIndicator", function(button, checksRange, inRange)
+        local state = rangeState[button] or {}
+        state.checks, state.inRange = checksRange, inRange
+        rangeState[button] = state
+        local bar = DB() and BarOf(button)
+        if bar then UpdateButton(button, BarHides(bar)) end
+    end)
 end
 
 -- Called by the key binding (Bindings.xml) with "down" and "up".
@@ -134,9 +211,24 @@ page:Checkbox("Hide the Range Dot",
     function(value)
         DB().hideRangeDot = value
         UpdateAll()
+        page:Refresh()
     end,
     "Buttons without a keybind show a small dot where the keybind would be. It turns red when your target is out "
         .. "of range for that button. Turn this on to hide the dot too.", needsEnabled)
+page:Checkbox("Range Dot on Every Button",
+    function() return DB().rangeDotOnBound end,
+    function(value)
+        DB().rangeDotOnBound = value
+        UpdateAll()
+    end,
+    "Buttons with a keybind show the range dot in its place while the keybind is hidden, so you can still see when "
+        .. "your target is out of range.", {
+        indent = true,
+        enabled = function() return Enabled() and not DB().hideRangeDot end,
+        disabledTooltip = function()
+            return Enabled() and "Turn off Hide the Range Dot first." or "Turn on Hide Keybinds first."
+        end,
+    })
 
 -- The hold-to-show key: click the button, then press a key (with Shift, Ctrl or Alt if wanted). Escape cancels;
 -- right-click clears it. It's the same binding as Keybindings > AddOns > Hide Keybinds.
@@ -257,7 +349,24 @@ local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("UPDATE_BINDINGS")
+-- a slot emptied or a bar paged: the dots follow once Blizzard's buttons have updated
+for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR" }) do
+    pcall(events.RegisterEvent, events, event)
+end
+local updateQueued = false
+local function QueueUpdate()
+    if updateQueued then return end
+    updateQueued = true
+    C_Timer.After(0, function()
+        updateQueued = false
+        UpdateAll()
+    end)
+end
 events:SetScript("OnEvent", function(_, event, name)
+    if event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIONBAR_PAGE_CHANGED" or event == "UPDATE_BONUS_ACTIONBAR" then
+        QueueUpdate()
+        return
+    end
     if event == "ADDON_LOADED" then
         if name ~= "HideKeybinds" then return end
         HideKeybindsDB = HideKeybindsDB or {}
@@ -272,6 +381,10 @@ events:SetScript("OnEvent", function(_, event, name)
         C_Timer.After(0, UpdateAll)
         if page.frame:IsShown() and not listening then keyButton:SetText(PeekKeyText()) end
     else
+        -- make every button's dot now, out of combat
+        for _, bar in ipairs(BARS) do
+            for _, button in ipairs(Buttons(bar)) do DotOf(button, HotKeyOf(button)) end
+        end
         UpdateAll()
     end
 end)
