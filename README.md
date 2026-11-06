@@ -15,6 +15,7 @@ Options > AddOns > Hide Keybinds (or `/hidekeybinds`):
 - **Range Dot on Every Button**: buttons with a keybind have no dot (Blizzard turns the keybind red instead), so
   while their keybind is hidden they get the dot too, with the same rules: shown when the action has a range, red
   when the target is out of it. On by default.
+- **Hide Macro Names**: hides the macro names along the bottom of the buttons, on every action bar (off by default).
 - **Show Keybinds While Held**: click, then press a key (Shift, Ctrl and Alt combinations and extra mouse buttons
   work). Escape cancels, right-click clears it. It's the same binding as Options > Keybindings > AddOns > Hide
   Keybinds.

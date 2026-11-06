@@ -8,6 +8,7 @@ local DEFAULTS = {
     enabled = true,
     hideRangeDot = false,
     rangeDotOnBound = true,
+    hideMacroNames = false,
     bars = {},
 }
 
@@ -106,7 +107,15 @@ local function HasActionOn(button)
     return action == nil or HasAction(action)
 end
 
+-- The macro's name along the bottom of a button (its alpha only, like the keybinds; Blizzard keeps setting the text)
+local function NameOf(button)
+    return button.Name or _G[button:GetName() .. "Name"]
+end
+
 local function UpdateButton(button, hideBar)
+    local name = NameOf(button)
+    if name then name:SetAlpha(DB().hideMacroNames and 0 or 1) end
+
     local hotKey = HotKeyOf(button)
     local isDot = IsRangeDot(hotKey)
     local hide = hideBar and (DB().hideRangeDot or not isDot)
@@ -231,6 +240,13 @@ page:Checkbox("Range Dot on Every Button",
             return Enabled() and "Turn off Hide the Range Dot first." or "Turn on Hide Keybinds first."
         end,
     })
+page:Checkbox("Hide Macro Names",
+    function() return DB().hideMacroNames end,
+    function(value)
+        DB().hideMacroNames = value
+        UpdateAll()
+    end,
+    "Hide the macro names along the bottom of the action bars' buttons, on every action bar.")
 
 -- The hold-to-show key: click the button, then press a key (with Shift, Ctrl or Alt if wanted). Escape cancels;
 -- right-click clears it. It's the same binding as Keybindings > AddOns > Hide Keybinds.
